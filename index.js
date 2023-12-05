@@ -30,7 +30,7 @@ const server = app.listen(5000, () => {
 
 const io = socket(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "https://incredible-llama-040902.netlify.app",
     credentials: true
   }
 })
