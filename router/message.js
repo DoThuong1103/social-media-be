@@ -30,7 +30,8 @@ router.get('/:userId1/:userId2', verifyToken, async (req, res) => {
       return {
         sender: msg.sender,
         mySelf: msg.sender.toString() === userId1,
-        message: msg.message
+        message: msg.message,
+        files: msg.files
       }
     })
     return res.status(200).json(allMessage)

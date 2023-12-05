@@ -160,6 +160,8 @@ router.post("/login",
   }
 )
 
+// Get profile user
+
 //Forgot password
 router.post("/forgot/password", async (req, res) => {
   const { email } = req.body;
@@ -342,23 +344,65 @@ router.get('/post/user/details/:id', async (req, res) => {
 router.get("/allUser", verifyToken, async (req, res) => {
   try {
     const user = await User?.findById(req.user.id)
-    const users = await User?.find({ _id: { $nin: [req.user.id, ...user?.Following] } })
+    const users = await User?.find({ _id: { $nin: [req.user.id] } })
       .sort({ username: 1 })
     let filterUser = await Promise.all(
       users.map(async (user) => {
-        const { email, Followers, Following, password, phonenumber, ...others } = user._doc
-        return others
+        const { username, _id, avatar } = user._doc
+        return {
+          username,
+          _id,
+          avatar
+        }
       })
     )
     res.status(200).json(filterUser)
   } catch (error) {
     return res.status(500).json("Internal error occured")
-
   }
 })
 
-// Get followings user 
+// Get user other 
+router.get("/suggestions", verifyToken, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.page) || 10; // Số lượng mục trên mỗi trang
+  // try {
+  const dataUser = await User?.findById(req.user.id)
+  const users = await User?.find({ _id: { $nin: [req.user.id, ...dataUser.friends, ...dataUser.friendRequest, ...dataUser.addFriends] } }).populate({
+    path: "friends",
+    select: "username avatar",
+  })
+    .sort({ username: 1 })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize);
+  const filterUser = await Promise.all(
+    users.map(async (user) => {
+      const { _id, avatar, username, ...others } = user._doc
+      const commonFriends = others?.friends?.filter((friend) => dataUser?.friends?.includes(friend));
+      const friendsDetails = await Promise.all(
+        commonFriends?.map(async (friendId) => {
+          const friendDetails = await User.findById(friendId);
+          return {
+            id: friendDetails?._id || "",
+            username: friendDetails?.username || "",
+            avatar: friendDetails?.avatar || "", // Thêm các trường thông tin khác nếu cần
+          };
+        })
+      );
+      return {
+        _id, avatar, username,
+        mutualFriends: friendsDetails || [], // Nếu không có bạn chung, trả về mảng trống
+      };
+    })
+  )
 
+  res.status(200).json(filterUser)
+  // } catch (error) {
+  //   return res.status(500).json("Internal error occured")
+  // }
+})
+
+// Get followings user 
 router.get("/followings/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
@@ -464,22 +508,44 @@ router.put("/checkNotification", verifyToken, async (req, res) => {
 })
 
 // Get friends
-router.get('/allFriend', verifyToken, async (req, res) => {
+router.get('/allFriend/:id', verifyToken, async (req, res) => {
   try {
-    const userData = await User.findById(req.user.id).populate({
+    const userData = await User.findById(req.params.id || req.user.id).populate({
       path: 'friends',
       model: "User",
-      select: "avatar username"
+      select: "avatar username friends"
     });
+    const user = await User.findById(req.user.id)
+
 
     const friendsWithMessages = await Promise.all(
       userData?.friends?.map(async (friend) => {
-        const { _id, username, avatar } = friend._doc;
+        const { _id, username, avatar, friends } = friend._doc;
+        const commonFriends = friends?.filter((friend) =>
+          user?.friends?.some((item) => item === friend)
+        );
+        const friendsDetails = await Promise.all(
+          commonFriends?.map(async (friendId) => {
+            const friendDetails = await User.findById(friendId);
+            return {
+              id: friendDetails?._id || "",
+              username: friendDetails?.username || "",
+              avatar: friendDetails?.avatar || "", // Thêm các trường thông tin khác nếu cần
+            };
+          })
+        );
         const messages = await Message.findOne({
           chatUsers: { $all: [req.user.id, _id.toString()] }
         }).sort({ updatedAt: -1 });
 
-        return { _id, username, avatar, messages: messages };
+        return {
+          _id,
+          username,
+          avatar,
+          mutualFriends: friendsDetails || [],
+          messages: messages,
+          // mutualFriends: friendsDetails || [],
+        };
       })
     );
 
@@ -495,6 +561,7 @@ router.put('/addFriend/:id', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
     const friend = await User.findById(req.params.id)
+    console.log(friend);
     const check = await user.addFriends.includes(req.params.id)
     if (!check) {
       await user.updateOne({ $push: { addFriends: req.params.id } })
@@ -507,7 +574,7 @@ router.put('/addFriend/:id', verifyToken, async (req, res) => {
 })
 
 // Cancel add friend
-router.get('/rejectFriend/:id', verifyToken, async (req, res) => {
+router.put('/cancelAddFriend/:id', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
     const friend = await User.findById(req.params.id)
@@ -560,8 +627,8 @@ router.put('/deleteRequestFriend/:id', verifyToken, async (req, res) => {
   }
 })
 
-// Delete friend
-router.get('/deleteFriend/:id', verifyToken, async (req, res) => {
+// Unfriend
+router.put('/unFriend/:id', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
     const friend = await User.findById(req.params.id)
@@ -577,53 +644,67 @@ router.get('/deleteFriend/:id', verifyToken, async (req, res) => {
 })
 
 // Get Suggestions Friend
-router.get("/suggestions", verifyToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    const friendSuggestions = await Promise.all(
-      user?.friends?.map(async (friendId) => {
-        const friend = await User.findById(friendId).populate({
-          path: 'friends',
-          model: "User",
-          select: "avatar username"
-        });
-        const { friends, ...friendData } = friend._doc;
+// router.get("/suggestions", verifyToken, async (req, res) => {
+//   try {
+//     const user = await User.findById(req.user.id);
+//     const friendSuggestions = await Promise.all(
+//       user?.friends?.map(async (friendId) => {
+//         const friend = await User.findById(friendId).populate({
+//           path: 'friends',
+//           model: "User",
+//           select: "avatar username"
+//         });
+//         const { friends, ...friendData } = friend._doc;
 
-        return { ...friendData, friends };
-      })
-    );
+//         return { ...friendData, friends };
+//       })
+//     );
 
-    // Hợp nhất danh sách bạn bè từ tất cả các phần tử thành một danh sách duy nhất
-    const mergedFriendSuggestions = friendSuggestions.reduce((acc, curr) => {
-      acc.push(...curr.friends);
-      return acc;
-    }, []);
+//     // Hợp nhất danh sách bạn bè từ tất cả các phần tử thành một danh sách duy nhất
+//     const mergedFriendSuggestions = friendSuggestions.reduce((acc, curr) => {
+//       acc.push(...curr.friends);
+//       return acc;
+//     }, []);
 
-    // Lọc ra những người bạn mà không bao gồm chính bạn và bạn bè của bạn
-    const filteredFriendSuggestions = mergedFriendSuggestions.filter(
-      friend => !user.friends.includes(friend._id.toString()) && friend._id.toString() !== req.user.id.toString()
-    );
-    const uniqueIds = [...new Set(filteredFriendSuggestions.map(o => o._id.toString()))];
-    const filtered = filteredFriendSuggestions.filter(({ _id }) =>
-      uniqueIds.includes(_id.toString()) &&
-      !user.addFriends.includes(_id.toString())
-    );
+//     // Lọc ra những người bạn mà không bao gồm chính bạn và bạn bè của bạn
+//     const filteredFriendSuggestions = mergedFriendSuggestions.filter(
+//       friend => !user.friends.includes(friend._id.toString()) && friend._id.toString() !== req.user.id.toString()
+//     );
+//     const uniqueIds = [...new Set(filteredFriendSuggestions.map(o => o._id.toString()))];
+//     const filtered = filteredFriendSuggestions.filter(({ _id }) =>
+//       uniqueIds.includes(_id.toString()) &&
+//       !user.addFriends.includes(_id.toString())
+//     );
 
-    res.status(200).json(filtered);
-  } catch (error) {
-    return res.status(500).json("Lỗi nội bộ xảy ra");
-  }
-});
+//     res.status(200).json(filtered);
+//   } catch (error) {
+//     return res.status(500).json("Lỗi nội bộ xảy ra");
+//   }
+// });
 
 // Get friend request
 router.get('/friendRequest', verifyToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
-    const friendRequest = await User.find({ _id: { $in: user?.friendRequest } })
+    const dataUser = await User.findById(req.user.id)
+
+    const friendRequest = await User.find({ _id: { $in: dataUser?.friendRequest } })
     let filterUser = await Promise.all(
       friendRequest.map(async (user) => {
-        const { _id, username, avatar } = user._doc
-        return { _id, username, avatar }
+        const { _id, username, avatar, ...others } = user._doc
+        const commonFriends = others?.friends?.filter((friend) => dataUser?.friends?.includes(friend));
+        // console.log('1', others?.friends);
+        // console.log('2', commonFriends);
+        const friendsDetails = await Promise.all(
+          commonFriends?.map(async (friendId) => {
+            const friendDetails = await User.findById(friendId);
+            return {
+              id: friendDetails?._id || "",
+              username: friendDetails?.username || "",
+              avatar: friendDetails?.avatar || "", // Thêm các trường thông tin khác nếu cần
+            };
+          })
+        )
+        return { _id, username, avatar, mutualFriends: friendsDetails || [] }
       })
     )
     res.status(200).json(filterUser)
@@ -638,9 +719,13 @@ router.get('/yourRequests', verifyToken, async (req, res) => {
     const user = await User.findById(req.user.id)
     const friendRequest = await User.find({ _id: { $in: user?.addFriends } })
     let filterUser = await Promise.all(
-      friendRequest.map(async (user) => {
-        const { _id, username, avatar } = user._doc
-        return { _id, username, avatar }
+      friendRequest.map(async (item) => {
+        const { _id, username, avatar, ...others } = item._doc
+        const commonFriends = others?.friends?.filter((friend) => user?.friends?.includes(friend));
+        return {
+          _id, username, avatar,
+          mutualFriends: commonFriends || []
+        }
       })
     )
     res.status(200).json(filterUser)

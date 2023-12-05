@@ -53,8 +53,11 @@ router.post("/user/post", verifyToken, async (req, res) => {
 });
 
 // get user post
-router.get('/userPost/:id', verifyToken, async (req, res) => {
+router.get('/userPost/:id', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
   try {
+    const totalPost = await Post.find({ user: req.params.id }).countDocuments();
     const posts = await Post.find({ user: req.params.id }).sort({ createdAt: -1 })
       .populate({
         path: "user",
@@ -69,21 +72,35 @@ router.get('/userPost/:id', verifyToken, async (req, res) => {
           select: "user avatar username"
         }
       })
-    posts.forEach(post => {
-      post.comments.sort((a, b) => b.createdAt - a.createdAt);
-    });
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
     const result = posts.map(post => {
       const result = { ...post._doc }
       result.countComment = result.comments.length
       result.comments = organizeComments(post.comments)
       return result
     });
-    res.status(200).json(result)
+    res.status(200).json({ result, totalPost })
   } catch (error) {
     return res.status(500).json("Internal error occuerd")
 
   }
 })
+
+// Get all image user 
+router.get('/images/:id', async (req, res) => {
+  try {
+    const posts = await Post.find({ user: req.params.id })
+    const images = await Promise.all(
+      posts.map(async (post) => {
+        return post.images
+      })
+    )
+    res.status(200).json(images);
+  } catch (error) {
+    return res.status(500).json("Internal error occurred");
+  }
+});
 
 // update post
 router.put('/update/post/:id', verifyToken, async (req, res) => {
@@ -289,6 +306,8 @@ router.get("/comments/:id", async (req, res) => {
 
 // Get all post 
 router.get("/allPost", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
   try {
     function organizeComments(comments, parentId = null) {
       const organizedComments = [];
@@ -318,6 +337,7 @@ router.get("/allPost", async (req, res) => {
       });
       return organizedComments;
     }
+    const totalPost = await Post.countDocuments();
     const posts = await Post.find().sort({ createdAt: -1 })
       .populate({
         path: "user",
@@ -332,16 +352,18 @@ router.get("/allPost", async (req, res) => {
           select: "user avatar username"
         }
       })
-    posts.forEach(post => {
-      post.comments.sort((a, b) => b.createdAt - a.createdAt);
-    });
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
+    // posts.forEach(post => {
+    //   post.comments.sort((a, b) => b.createdAt - a.createdAt);
+    // });
     const result = posts.map(post => {
       const result = { ...post._doc }
       result.countComment = result.comments.length
       result.comments = organizeComments(post.comments)
       return result
     });
-    res.status(200).json(result)
+    res.status(200).json({ result, totalPost })
   } catch (error) {
     return res.status(500).json("Internal error occured")
   }

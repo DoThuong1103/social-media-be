@@ -35,7 +35,7 @@ const UserSchema = new mongoose.Schema({
   relationship: {
     type: String,
   },
-  verifed: {
+  verified: {
     type: Boolean,
     required: true,
     default: false
@@ -48,6 +48,9 @@ const UserSchema = new mongoose.Schema({
   },
   friendRequest: {
     type: Array,
+  },
+  birthDay: {
+    type: String,
   },
   createdAt: {
     type: Date,
