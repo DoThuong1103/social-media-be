@@ -30,7 +30,7 @@ const server = app.listen(5000, () => {
 
 const io = socket(server, {
   cors: {
-    origin: "https://incredible-llama-040902.netlify.app",
+    origin: "https://media-social-t.netlify.app",
     credentials: true
   }
 })
