@@ -38,11 +38,12 @@ function organizeComments(comments, parentId = null) {
 // Create post
 router.post("/user/post", verifyToken, async (req, res) => {
   try {
-    let { title, images, video } = req.body;
+    let { title, images, video, group } = req.body;
     let newPost = new Post({
       title,
       images,
       video,
+      group,
       user: req.user.id,
     });
     const post = await newPost.save()
@@ -166,76 +167,78 @@ router.put("/:id/dislike", verifyToken, async (req, res) => {
 // Comment
 
 router.put("/comment", verifyToken, async (req, res) => {
+  try {
+    const { content, postId, userId, cmtMain, userIdCmt } = req.body;
+    function organizeComments(comments, parentId = null) {
+      const organizedComments = [];
+      comments.forEach(comment => {
+        if (!comment.cmtMain && parentId === null) {
+          // Comment cha cấp cao nhất
+          const topLevelComment = {
+            _id: comment._id,
+            user: comment.user,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            cmtMain: null,
+            replies: organizeComments(comments, comment._id)
+          };
+          organizedComments.push(topLevelComment);
+        } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
+          const nestedComment = {
+            _id: comment._id,
+            user: comment.user,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            cmtMain: comment.cmtMain,
+            replies: organizeComments(comments, comment._id)
+          };
+          organizedComments.push(nestedComment);
+        }
+      });
+      return organizedComments;
+    }
+    const comment = {
+      user: req.user.id,
+      cmtMain: cmtMain,
+      comment: content
+    }
 
-  const { content, postId, userId, cmtMain, userIdCmt } = req.body;
+    const post = await Post.findOneAndUpdate(
+      { _id: postId },
+      { $push: { comments: comment } },
+      { new: true }
+    );
+    if (userIdCmt && userIdCmt !== req.user.id) {
+      const newNotification = await Notification.create({
+        user: userIdCmt,
+        postId: postId,
+        userPost: req.user.id,
+        content: cmtMain ? 'commented on your comment!' : 'commented on your post!'
+      })
+    }
+    if (!post) {
+      return res.status(400).json("Không tìm thấy bài viết");
+    }
 
-  function organizeComments(comments, parentId = null) {
-    const organizedComments = [];
-    comments.forEach(comment => {
-      if (!comment.cmtMain && parentId === null) {
-        // Comment cha cấp cao nhất
-        const topLevelComment = {
-          _id: comment._id,
-          user: comment.user,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          cmtMain: null,
-          replies: organizeComments(comments, comment._id)
-        };
-        organizedComments.push(topLevelComment);
-      } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
-        const nestedComment = {
-          _id: comment._id,
-          user: comment.user,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          cmtMain: comment.cmtMain,
-          replies: organizeComments(comments, comment._id)
-        };
-        organizedComments.push(nestedComment);
-      }
-    });
-    return organizedComments;
+
+    let dataComments = await Post.findById(postId)
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          model: "User",
+          select: "avatar username"
+        },
+      })
+    dataComments.comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const result = { ...dataComments._doc }
+    result.countComment = result.comments.length
+    result.comments = await organizeComments(dataComments.comments)
+    res.status(200).json(result)
+  } catch (error) {
+    return res.status(500).json("Internal error occured")
   }
-  const comment = {
-    user: req.user.id,
-    cmtMain: cmtMain,
-    comment: content
-  }
-
-  const post = await Post.findOneAndUpdate(
-    { _id: postId },
-    { $push: { comments: comment } },
-    { new: true }
-  );
-  if (userIdCmt && userIdCmt !== req.user.id) {
-    const newNotification = await Notification.create({
-      user: userIdCmt,
-      postId: postId,
-      userPost: req.user.id,
-      content: cmtMain ? 'commented on your comment!' : 'commented on your post!'
-    })
-  }
-  if (!post) {
-    return res.status(400).json("Không tìm thấy bài viết");
-  }
-
-
-  let dataComments = await Post.findById(postId)
-    .sort({ createdAt: -1 })
-    .populate({
-      path: 'comments',
-      populate: {
-        path: 'user',
-        model: "User",
-        select: "avatar username"
-      },
-    })
-  dataComments.comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const result = { ...dataComments._doc }
-  result.countComment = result.comments.length
-  result.comments = await organizeComments(dataComments.comments)
-  res.status(200).json(result)
 });
 
 
@@ -289,23 +292,86 @@ router.get("/comments/:id", async (req, res) => {
   }
 })
 
-// Fetch post following
-// router.get('/flw', verifyToken, async (req, res) => {
-//   try {
-//     const user = await User.findById(req.user.id)
-//     const userPost = await Post.find({ user: req.user.id }).sort({ createdAt: -1 })
-//     const posts = await Post.find({ user: { $in: user?.Following } }).sort({ createdAt: -1 });
-//     const sortedPosts = posts.sort((a, b) => b.createdAt - a.createdAt)
-//     console.log();
-//     console.log();
-//     res.status(200).json(userPost.concat(...sortedPosts))
-//   } catch (error) {
-//     return res.status(500).json("Internal error occured")
-//   }
-// })
-
 // Get all post 
-router.get("/allPost", async (req, res) => {
+router.get("/allPost", verifyToken, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
+
+  try {
+  function organizeComments(comments, parentId = null) {
+    const organizedComments = [];
+    comments.forEach(comment => {
+      if (!comment.cmtMain && parentId === null) {
+        const topLevelComment = {
+          user: comment.user,
+          _id: comment._id,
+          comment: comment.comment,
+          createdAt: comment.createdAt,
+          cmtMain: null,
+          replies: organizeComments(comments, comment._id.toString())
+        };
+        organizedComments.push(topLevelComment);
+      } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
+        const nestedComment = {
+          user: comment.user,
+          comment: comment.comment,
+          createdAt: comment.createdAt,
+          _id: comment._id,
+          cmtMain: comment.cmtMain,
+          replies: organizeComments(comments, comment._id)
+        };
+        organizedComments.push(nestedComment);
+      }
+    });
+    return organizedComments;
+  }
+
+  const user = await User.findById(req.user.id);
+
+  const userGroups = user.group.map(group => group.toString());
+
+  const totalPost = await Post.countDocuments();
+  const posts = await Post.find().sort({ createdAt: -1 })
+    .populate({
+      path: "user",
+      model: 'User',
+      select: "username avatar"
+    })
+    .populate({
+      path: "comments",
+      populate: {
+        path: "user",
+        model: "User",
+        select: "user avatar username"
+      }
+    })
+    .populate({
+      path: "group",
+      model: "Group",
+      select: "groupName coverImage"
+    })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize);
+
+  const result = posts.reduce((acc, post) => {
+    // Check if the post has a groupId
+    if (!post.group || userGroups.includes(post.group._id.toString())) {
+      const postResult = { ...post._doc };
+      postResult.countComment = postResult.comments.length;
+      postResult.comments = organizeComments(post.comments);
+      acc.push(postResult);
+    }
+    return acc;
+  }, []);
+
+  res.status(200).json({ result, totalPost });
+  } catch (error) {
+    return res.status(500).json("Internal error occurred");
+  }
+});
+
+// Get posts group
+router.get("/postsGroup/:id", async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const pageSize = parseInt(req.query.pageSize) || 10;
   try {
@@ -337,8 +403,8 @@ router.get("/allPost", async (req, res) => {
       });
       return organizedComments;
     }
-    const totalPost = await Post.countDocuments();
-    const posts = await Post.find().sort({ createdAt: -1 })
+    const totalPost = await Post.find({ group: req.params.id }).countDocuments()
+    const posts = await Post.find({ group: req.params.id }).sort({ createdAt: -1 })
       .populate({
         path: "user",
         model: 'User',
@@ -351,6 +417,11 @@ router.get("/allPost", async (req, res) => {
           model: "User",
           select: "user avatar username"
         }
+      })
+      .populate({
+        path: "group",
+        model: "Group",
+        select: "groupName coverImage"
       })
       .skip((page - 1) * pageSize)
       .limit(pageSize);
@@ -366,6 +437,116 @@ router.get("/allPost", async (req, res) => {
     res.status(200).json({ result, totalPost })
   } catch (error) {
     return res.status(500).json("Internal error occured")
+  }
+})
+
+// Get posts on user groups
+router.get("/allPostGroups", verifyToken, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
+
+  try {
+  function organizeComments(comments, parentId = null) {
+    const organizedComments = [];
+    comments.forEach(comment => {
+      if (!comment.cmtMain && parentId === null) {
+        const topLevelComment = {
+          user: comment.user,
+          _id: comment._id,
+          comment: comment.comment,
+          createdAt: comment.createdAt,
+          cmtMain: null,
+          replies: organizeComments(comments, comment._id.toString())
+        };
+        organizedComments.push(topLevelComment);
+      } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
+        const nestedComment = {
+          user: comment.user,
+          comment: comment.comment,
+          createdAt: comment.createdAt,
+          _id: comment._id,
+          cmtMain: comment.cmtMain,
+          replies: organizeComments(comments, comment._id)
+        };
+        organizedComments.push(nestedComment);
+      }
+    });
+    return organizedComments;
+  }
+
+  const user = await User.findById(req.user.id);
+
+  const userGroups = user.group.map(group => group.toString());
+
+  const totalPost = await Post.find({ group: { $in: user.group } }).countDocuments();
+  const posts = await Post.find({ group: { $in: user.group } }).sort({ createdAt: -1 })
+    .populate({
+      path: "user",
+      model: 'User',
+      select: "username avatar"
+    })
+    .populate({
+      path: "comments",
+      populate: {
+        path: "user",
+        model: "User",
+        select: "user avatar username"
+      }
+    })
+    .populate({
+      path: "group",
+      model: "Group",
+      select: "groupName coverImage"
+    })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize);
+
+  const result = posts.map(post => {
+    const result = { ...post._doc }
+    result.countComment = result.comments.length
+    result.comments = organizeComments(post.comments)
+    return result
+  });
+
+  res.status(200).json({ result, totalPost });
+  } catch (error) {
+    return res.status(500).json("Internal error occurred");
+  }
+});
+
+// Get posts video
+router.get('/videos', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
+  try {
+    const totalPost = await Post.find({ video: { $exists: true, $ne: null } }).countDocuments()
+    const postsWithVideos = await Post.find({ video: { $exists: true, $ne: null } })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "user",
+        model: 'User',
+        select: "username avatar"
+      })
+      .populate({
+        path: "comments",
+        populate: {
+          path: "user",
+          model: "User",
+          select: "user avatar username"
+        }
+      })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
+    const result = postsWithVideos.map(post => {
+      const result = { ...post._doc }
+      result.countComment = result.comments.length
+      result.comments = organizeComments(post.comments)
+      return result
+    });
+    res.status(200).json({ result, totalPost });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal error occurred" });
   }
 })
 
@@ -442,8 +623,5 @@ router.get('/:id', async (req, res) => {
     return res.status(500).json("Internal error occuerd")
   }
 })
-
-
-
 
 module.exports = router;

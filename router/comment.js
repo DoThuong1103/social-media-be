@@ -15,19 +15,19 @@ const Notification = require('../Modals/Notification');
 
 // Create comment
 router.post("/createComment", verifyToken, async (req, res) => {
-  // try {
-  let { postId, user, userMain, comment } = req.body
-  let newComment = new Comment({
-    postId,
-    user,
-    userMain,
-    comment
-  })
-  await newComment.save()
-  res.status(200).json("Comment has been posted!")
-  // } catch (error) {
-  //   return res.status(500).json(error)
-  // }
+  try {
+    let { postId, user, userMain, comment } = req.body
+    let newComment = new Comment({
+      postId,
+      user,
+      userMain,
+      comment
+    })
+    await newComment.save()
+    res.status(200).json("Comment has been posted!")
+  } catch (error) {
+    return res.status(500).json(error)
+  }
 })
 
 router.get("/:id", async (req, res) => {

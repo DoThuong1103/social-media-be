@@ -21,6 +21,9 @@ const PostSchema = new mongoose.Schema({
   dislike: {
     type: Array,
   },
+  group: {
+    type: String,
+  },
   comments: [
     {
       user: {

@@ -6,19 +6,19 @@ const router = require('express').Router()
 // get msg
 
 router.post('/msg', async (req, res) => {
-  // try {
-  const { from, to, message, files } = req.body
-  const newMessage = await Message.create({
-    message: message,
-    sender: from,
-    chatUsers: [from, to],
-    files: files
-  })
-  res.status(200).json(newMessage)
-  // } catch (error) {
-  //   return res.status(500).json('Internal server error')
+  try {
+    const { from, to, message, files } = req.body
+    const newMessage = await Message.create({
+      message: message,
+      sender: from,
+      chatUsers: [from, to],
+      files: files
+    })
+    res.status(200).json(newMessage)
+  } catch (error) {
+    return res.status(500).json('Internal server error')
 
-  // }
+  }
 })
 
 // get msg

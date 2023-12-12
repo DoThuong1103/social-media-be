@@ -49,6 +49,15 @@ const UserSchema = new mongoose.Schema({
   friendRequest: {
     type: Array,
   },
+  group: {
+    type: Array,
+  },
+  groupRequest: {
+    type: Array,
+  },
+  invitationGroup: {
+    type: Array,
+  },
   birthDay: {
     type: String,
   },

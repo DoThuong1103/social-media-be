@@ -4,8 +4,8 @@ const app = express()
 const dotenv = require('dotenv')
 const userRouter = require('./router/user')
 const postRouter = require('./router/post')
-const notificationRouter = require('./router/notification')
 const messageRouter = require('./router/message')
+const groupRouter = require('./router/group')
 const cors = require('cors')
 const socket = require('socket.io')
 dotenv.config()
@@ -21,8 +21,8 @@ app.use(cors())
 app.use(express.json())
 app.use('/api/user', userRouter)
 app.use('/api/post', postRouter)
-app.use('/api/notification', notificationRouter)
 app.use('/api/message', messageRouter)
+app.use('/api/group', groupRouter)
 
 const server = app.listen(5000, () => {
   console.log('Server is running');
@@ -30,7 +30,7 @@ const server = app.listen(5000, () => {
 
 const io = socket(server, {
   cors: {
-    origin: "https://jocular-pavlova-a4d02c.netlify.app",
+    origin: process.env.URL_FRONT_END,
     credentials: true
   }
 })
@@ -41,6 +41,7 @@ function getOnlineUsers() {
   return Array.from(global.onlineUsers.keys());
 }
 io.on('connection', (socket) => {
+
   global.chatsocket = socket;
   socket.on("addUser", (id) => {
     global.onlineUsers.set(id, socket.id);
