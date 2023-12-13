@@ -298,73 +298,73 @@ router.get("/allPost", verifyToken, async (req, res) => {
   const pageSize = parseInt(req.query.pageSize) || 10;
 
   try {
-  function organizeComments(comments, parentId = null) {
-    const organizedComments = [];
-    comments.forEach(comment => {
-      if (!comment.cmtMain && parentId === null) {
-        const topLevelComment = {
-          user: comment.user,
-          _id: comment._id,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          cmtMain: null,
-          replies: organizeComments(comments, comment._id.toString())
-        };
-        organizedComments.push(topLevelComment);
-      } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
-        const nestedComment = {
-          user: comment.user,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          _id: comment._id,
-          cmtMain: comment.cmtMain,
-          replies: organizeComments(comments, comment._id)
-        };
-        organizedComments.push(nestedComment);
-      }
-    });
-    return organizedComments;
-  }
-
-  const user = await User.findById(req.user.id);
-
-  const userGroups = user.group.map(group => group.toString());
-
-  const totalPost = await Post.countDocuments();
-  const posts = await Post.find().sort({ createdAt: -1 })
-    .populate({
-      path: "user",
-      model: 'User',
-      select: "username avatar"
-    })
-    .populate({
-      path: "comments",
-      populate: {
-        path: "user",
-        model: "User",
-        select: "user avatar username"
-      }
-    })
-    .populate({
-      path: "group",
-      model: "Group",
-      select: "groupName coverImage"
-    })
-    .skip((page - 1) * pageSize)
-    .limit(pageSize);
-
-  const result = posts.reduce((acc, post) => {
-    // Check if the post has a groupId
-    if (!post.group || userGroups.includes(post.group._id.toString())) {
-      const postResult = { ...post._doc };
-      postResult.countComment = postResult.comments.length;
-      postResult.comments = organizeComments(post.comments);
-      acc.push(postResult);
+    function organizeComments(comments, parentId = null) {
+      const organizedComments = [];
+      comments.forEach(comment => {
+        if (!comment.cmtMain && parentId === null) {
+          const topLevelComment = {
+            user: comment.user,
+            _id: comment._id,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            cmtMain: null,
+            replies: organizeComments(comments, comment._id.toString())
+          };
+          organizedComments.push(topLevelComment);
+        } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
+          const nestedComment = {
+            user: comment.user,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            _id: comment._id,
+            cmtMain: comment.cmtMain,
+            replies: organizeComments(comments, comment._id)
+          };
+          organizedComments.push(nestedComment);
+        }
+      });
+      return organizedComments;
     }
-    return acc;
-  }, []);
 
-  res.status(200).json({ result, totalPost });
+    const user = await User.findById(req.user.id);
+
+    const userGroups = user.group.map(group => group.toString());
+
+    const totalPost = await Post.countDocuments();
+    const posts = await Post.find().sort({ createdAt: -1 })
+      .populate({
+        path: "user",
+        model: 'User',
+        select: "username avatar"
+      })
+      .populate({
+        path: "comments",
+        populate: {
+          path: "user",
+          model: "User",
+          select: "user avatar username"
+        }
+      })
+      .populate({
+        path: "group",
+        model: "Group",
+        select: "groupName coverImage"
+      })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
+
+    const result = posts.reduce((acc, post) => {
+      // Check if the post has a groupId
+      if (!post.group || userGroups.includes(post.group._id.toString())) {
+        const postResult = { ...post._doc };
+        postResult.countComment = postResult.comments.length;
+        postResult.comments = organizeComments(post.comments);
+        acc.push(postResult);
+      }
+      return acc;
+    }, []);
+
+    res.status(200).json({ result, totalPost });
   } catch (error) {
     return res.status(500).json("Internal error occurred");
   }
@@ -446,79 +446,81 @@ router.get("/allPostGroups", verifyToken, async (req, res) => {
   const pageSize = parseInt(req.query.pageSize) || 10;
 
   try {
-  function organizeComments(comments, parentId = null) {
-    const organizedComments = [];
-    comments.forEach(comment => {
-      if (!comment.cmtMain && parentId === null) {
-        const topLevelComment = {
-          user: comment.user,
-          _id: comment._id,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          cmtMain: null,
-          replies: organizeComments(comments, comment._id.toString())
-        };
-        organizedComments.push(topLevelComment);
-      } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
-        const nestedComment = {
-          user: comment.user,
-          comment: comment.comment,
-          createdAt: comment.createdAt,
-          _id: comment._id,
-          cmtMain: comment.cmtMain,
-          replies: organizeComments(comments, comment._id)
-        };
-        organizedComments.push(nestedComment);
-      }
-    });
-    return organizedComments;
-  }
+    function organizeComments(comments, parentId = null) {
+      const organizedComments = [];
+      comments.forEach(comment => {
+        if (!comment.cmtMain && parentId === null) {
+          const topLevelComment = {
+            user: comment.user,
+            _id: comment._id,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            cmtMain: null,
+            replies: organizeComments(comments, comment._id.toString())
+          };
+          organizedComments.push(topLevelComment);
+        } else if (comment.cmtMain && comment.cmtMain.equals(parentId)) {
+          const nestedComment = {
+            user: comment.user,
+            comment: comment.comment,
+            createdAt: comment.createdAt,
+            _id: comment._id,
+            cmtMain: comment.cmtMain,
+            replies: organizeComments(comments, comment._id)
+          };
+          organizedComments.push(nestedComment);
+        }
+      });
+      return organizedComments;
+    }
 
-  const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
 
-  const userGroups = user.group.map(group => group.toString());
+    const userGroups = user.group.map(group => group.toString());
 
-  const totalPost = await Post.find({ group: { $in: user.group } }).countDocuments();
-  const posts = await Post.find({ group: { $in: user.group } }).sort({ createdAt: -1 })
-    .populate({
-      path: "user",
-      model: 'User',
-      select: "username avatar"
-    })
-    .populate({
-      path: "comments",
-      populate: {
+    const totalPost = await Post.find({ group: { $in: user.group } }).countDocuments();
+    const posts = await Post.find({ group: { $in: user.group } }).sort({ createdAt: -1 })
+      .populate({
         path: "user",
-        model: "User",
-        select: "user avatar username"
-      }
-    })
-    .populate({
-      path: "group",
-      model: "Group",
-      select: "groupName coverImage"
-    })
-    .skip((page - 1) * pageSize)
-    .limit(pageSize);
+        model: 'User',
+        select: "username avatar"
+      })
+      .populate({
+        path: "comments",
+        populate: {
+          path: "user",
+          model: "User",
+          select: "user avatar username"
+        }
+      })
+      .populate({
+        path: "group",
+        model: "Group",
+        select: "groupName coverImage"
+      })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
 
-  const result = posts.map(post => {
-    const result = { ...post._doc }
-    result.countComment = result.comments.length
-    result.comments = organizeComments(post.comments)
-    return result
-  });
+    const result = posts.map(post => {
+      const result = { ...post._doc }
+      result.countComment = result.comments.length
+      result.comments = organizeComments(post.comments)
+      return result
+    });
 
-  res.status(200).json({ result, totalPost });
+    res.status(200).json({ result, totalPost });
   } catch (error) {
     return res.status(500).json("Internal error occurred");
   }
 });
 
 // Get posts video
-router.get('/videos', async (req, res) => {
+router.get('/videos', verifyToken, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const pageSize = parseInt(req.query.pageSize) || 10;
   try {
+    const user = await User.findById(req.user.id);
+    const userGroups = user.group.map(group => group.toString());
     const totalPost = await Post.find({ video: { $exists: true, $ne: null } }).countDocuments()
     const postsWithVideos = await Post.find({ video: { $exists: true, $ne: null } })
       .sort({ createdAt: -1 })
@@ -534,15 +536,29 @@ router.get('/videos', async (req, res) => {
           model: "User",
           select: "user avatar username"
         }
+      }).populate({
+        path: "group",
+        model: "Group",
+        select: "groupName coverImage"
       })
       .skip((page - 1) * pageSize)
       .limit(pageSize);
-    const result = postsWithVideos.map(post => {
-      const result = { ...post._doc }
-      result.countComment = result.comments.length
-      result.comments = organizeComments(post.comments)
-      return result
-    });
+    const result = postsWithVideos.reduce((acc, post) => {
+      // Check if the post has a groupId
+      if (!post.group || userGroups.includes(post.group._id.toString())) {
+        const postResult = { ...post._doc };
+        postResult.countComment = postResult.comments.length;
+        postResult.comments = organizeComments(post.comments);
+        acc.push(postResult);
+      }
+      return acc;
+    }, []);
+    // const result = postsWithVideos.map(post => {
+    //   const result = { ...post._doc }
+    //   result.countComment = result.comments.length
+    //   result.comments = organizeComments(post.comments)
+    //   return result
+    // });
     res.status(200).json({ result, totalPost });
   } catch (error) {
     console.error(error);

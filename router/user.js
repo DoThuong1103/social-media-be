@@ -56,30 +56,30 @@ router.post("/create/user",
       })
       verificationToken.save()
       await user.save();
-      const transport = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        auth: {
-          user: process.env.USER,
-          pass: process.env.PASSWORD
-        }
-      });
+      // const transport = nodemailer.createTransport({
+      //   host: "smtp.gmail.com",
+      //   port: 587,
+      //   auth: {
+      //     user: process.env.USER,
+      //     pass: process.env.PASSWORD
+      //   }
+      // });
 
-      transport.sendMail({
-        from: "sociaMedia@gmail.com",
-        // from: '"Fred Foo 👻" <foo@example.com>', // Đặt địa chỉ email của bạn ở đây
-        to: user.email,
-        subject: "Verify your email using OTP",
-        html: `<h1>Your OTP is ${OTP}</h1>`,
-      }, (error, info) => {
-        if (error) {
-          console.error(error);
-        } else {
-          console.log('Email sent: ' + info.response);
-        }
-      });
+      // transport.sendMail({
+      //   from: "sociaMedia@gmail.com",
+      //   // from: '"Fred Foo 👻" <foo@example.com>', // Đặt địa chỉ email của bạn ở đây
+      //   to: user.email,
+      //   subject: "Verify your email using OTP",
+      //   html: `<h1>Your OTP is ${OTP}</h1>`,
+      // }, (error, info) => {
+      //   if (error) {
+      //     console.error(error);
+      //   } else {
+      //     console.log('Email sent: ' + info.response);
+      //   }
+      // });
       const { password, ...other } = user._doc
-      res.status(200).json({ Status: "Pending", mgs: "Please check email", user: other })
+      res.status(200).json("User created successfully")
     } catch (error) {
       return res.status(400).json("Internal error occured")
     }
@@ -194,14 +194,20 @@ router.post("/forgot/password", async (req, res) => {
       port: 587,
       auth: {
         user: process.env.USER,
-        pass: process.env.PASS
+        pass: process.env.PASSWORD
       }
     });
     transport.sendMail({
       from: "sociaMedia@gmail.com",
       to: user.email,
       subject: "Reset Token",
-      html: `http://localhost:3000/reset/password?token=${RandomTxt}&_id=${user._id}`
+      html: `${process.env.URL_FRONT_END}/reset/password?token=${RandomTxt}&_id=${user._id}`
+    }, (error, info) => {
+      if (error) {
+        console.error(error);
+      } else {
+        console.log('Email sent: ' + info.response);
+      }
     })
 
     return res.status(200).json("Check your email to reset password")
@@ -215,50 +221,59 @@ router.post("/forgot/password", async (req, res) => {
 
 //reset password
 router.put("/reset/password", async (req, res) => {
-  try {
-    const { token, _id } = req.query;
-    if (!token || !_id) {
-      return res.status(400).json("Invalid req");
-    }
-    const user = await User.findOne({ _id: _id });
-    if (!user) {
-      return res.status(400).json("user not found")
-    }
-    const resetToken = await ResetToken.findOne({ user: user._id });
-    if (!resetToken) {
-      return res.status(400).json("Reset token is not found")
-    }
-    const isMatch = await bcrypt.compareSync(token, resetToken.token);
-    if (!isMatch) {
-      return res.status(400).json("Token is not valid");
-    }
-
-    const { password } = req.body;
-    // const salt = await bcrypt.getSalt(10);
-    const secpass = await bcrypt.hash(password, 10);
-    user.password = secpass;
-    await user.save();
-    const transport = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      service: "gmail",
-      auth: {
-        user: process.env.USER,
-        pass: process.env.PASS
-      }
-    });
-    transport.sendMail({
-      from: "sociaMedia@gmail.com",
-      to: user.email,
-      subject: "Your password reset successfully",
-      html: `Now you can login with new password`
-    })
-
-    return res.status(200).json("Email has been send")
-
-  } catch (error) {
-    return res.status(500).json("Internal error occured")
-
+  // try {
+  const { token, _id } = req.query;
+  console.log(token);
+  if (!token || !_id) {
+    return res.status(400).json("Invalid req");
   }
+  const user = await User.findOne({ _id: _id });
+  if (!user) {
+    return res.status(400).json("user not found")
+  }
+  const resetToken = await ResetToken.findOne({ user: user._id });
+  if (!resetToken) {
+    return res.status(400).json("Reset token is not found")
+  }
+  const isMatch = await bcrypt.compareSync(token, resetToken.token);
+  if (!isMatch) {
+    return res.status(400).json("Token is not valid");
+  }
+
+  const { password } = req.body;
+  // const salt = await bcrypt.getSalt(10);
+  const secpass = await bcrypt.hash(password, 10);
+  user.password = secpass;
+  await user.save();
+  await ResetToken.findByIdAndDelete(resetToken._id);
+  console.log(user.email);
+  const transport = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    auth: {
+      user: process.env.USER,
+      pass: process.env.PASSWORD
+    }
+  });
+  transport.sendMail({
+    from: "sociaMedia@gmail.com",
+    to: user.email,
+    subject: "Your password reset successfully",
+    html: `Now you can login with new password`
+  }, (error, info) => {
+    if (error) {
+      console.error(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  })
+
+  return res.status(200).json("Email has been send")
+
+  // } catch (error) {
+  //   return res.status(500).json("Internal error occured")
+
+  // }
 })
 
 // Change password
@@ -532,51 +547,51 @@ router.put("/checkNotification", verifyToken, async (req, res) => {
 // Get friends
 router.get('/allFriend/:id', verifyToken, async (req, res) => {
   try {
-  const userData = await User.findById(req.params.id || req.user.id).populate({
-    path: 'friends',
-    model: "User",
-    select: "avatar username friends invitationGroup groupRequest group"
-  });
-  const user = await User.findById(req.user.id)
+    const userData = await User.findById(req.params.id || req.user.id).populate({
+      path: 'friends',
+      model: "User",
+      select: "avatar username friends invitationGroup groupRequest group"
+    });
+    const user = await User.findById(req.user.id)
 
 
-  const friendsWithMessages = await Promise.all(
-    userData?.friends?.map(async (friend) => {
-      const { _id, username, avatar, friends, invitationGroup, groupRequest, group } = friend._doc;
-      const commonFriends = friends?.filter((friend) =>
-        user?.friends?.some((item) => item === friend)
-      );
-      const friendsDetails = await Promise.all(
-        commonFriends?.map(async (friendId) => {
-          const friendDetails = await User.findById(friendId);
-          return {
-            id: friendDetails?._id || "",
-            username: friendDetails?.username || "",
-            avatar: friendDetails?.avatar || "",
-            // Thêm các trường thông tin khác nếu cần
-          };
-        })
-      );
-      const messages = await Message.findOne({
-        chatUsers: { $all: [req.user.id, _id.toString()] }
-      }).sort({ updatedAt: -1 });
+    const friendsWithMessages = await Promise.all(
+      userData?.friends?.map(async (friend) => {
+        const { _id, username, avatar, friends, invitationGroup, groupRequest, group } = friend._doc;
+        const commonFriends = friends?.filter((friend) =>
+          user?.friends?.some((item) => item === friend)
+        );
+        const friendsDetails = await Promise.all(
+          commonFriends?.map(async (friendId) => {
+            const friendDetails = await User.findById(friendId);
+            return {
+              id: friendDetails?._id || "",
+              username: friendDetails?.username || "",
+              avatar: friendDetails?.avatar || "",
+              // Thêm các trường thông tin khác nếu cần
+            };
+          })
+        );
+        const messages = await Message.findOne({
+          chatUsers: { $all: [req.user.id, _id.toString()] }
+        }).sort({ updatedAt: -1 });
 
-      return {
-        _id,
-        username,
-        avatar,
-        invitationGroup,
-        groupRequest,
-        group,
-        mutualFriends: friendsDetails || [],
-        messages: messages,
+        return {
+          _id,
+          username,
+          avatar,
+          invitationGroup,
+          groupRequest,
+          group,
+          mutualFriends: friendsDetails || [],
+          messages: messages,
 
-        // mutualFriends: friendsDetails || [],
-      };
-    })
-  );
+          // mutualFriends: friendsDetails || [],
+        };
+      })
+    );
 
-  res.status(200).json(friendsWithMessages);
+    res.status(200).json(friendsWithMessages);
   } catch (error) {
     console.error(error);
     return res.status(500).json("Internal error occurred");
@@ -618,20 +633,20 @@ router.put('/cancelAddFriend/:id', verifyToken, async (req, res) => {
 // Accept request Friend
 router.put('/acceptFriend/:id', verifyToken, async (req, res) => {
   try {
-  const user = await User.findById(req.user.id)
-  const friend = await User.findById(req.params.id)
-  const check = await user.friendRequest.includes(req.params.id)
-  if (check) {
-    await user.updateOne({
-      $pull: { friendRequest: req.params.id },
-      $push: { friends: req.params.id }
-    })
-    await friend.updateOne({
-      $pull: { addFriends: req.user.id },
-      $push: { friends: req.user.id }
-    })
-    res.status(200).json("Accept Request friend!")
-  }
+    const user = await User.findById(req.user.id)
+    const friend = await User.findById(req.params.id)
+    const check = await user.friendRequest.includes(req.params.id)
+    if (check) {
+      await user.updateOne({
+        $pull: { friendRequest: req.params.id },
+        $push: { friends: req.params.id }
+      })
+      await friend.updateOne({
+        $pull: { addFriends: req.user.id },
+        $push: { friends: req.user.id }
+      })
+      res.status(200).json("Accept Request friend!")
+    }
   } catch (error) {
     return res.status(500).json("Internal error occured")
   }
