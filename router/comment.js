@@ -26,7 +26,7 @@ router.post("/createComment", verifyToken, async (req, res) => {
     await newComment.save()
     res.status(200).json("Comment has been posted!")
   } catch (error) {
-    return res.status(500).json(error)
+    return res.status(500).json(error);
   }
 })
 
